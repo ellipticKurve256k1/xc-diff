@@ -25,13 +25,47 @@
         display: block;
       }
 
+      .layout-header {
+        max-width: 1320px;
+        margin: 0 auto 24px;
+        display: flex;
+        justify-content: center;
+        text-align: center;
+      }
+
+      .mode-toggle {
+        font-size: 0.95rem;
+        color: #475467;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #e4e7ec;
+        border-radius: 9999px;
+        padding: 6px 14px;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.07);
+      }
+
+      .mode-toggle input {
+        width: 16px;
+        height: 16px;
+      }
+
       .app-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        grid-template-columns: minmax(320px, 600px);
         gap: 24px;
         align-items: start;
         max-width: 1320px;
         margin: 0 auto;
+        justify-content: center;
+        justify-items: center;
+      }
+
+      .app-grid.dual-mode {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        justify-content: stretch;
+        justify-items: stretch;
       }
 
       .panel {
@@ -270,7 +304,15 @@
     </style>
   </head>
   <body>
-    <div class="app-grid">
+    <div class="layout-header">
+      <div class="mode-toggle">
+        <label>
+          <input type="checkbox" id="dual-mode-toggle" />
+          Enable dual panels
+        </label>
+      </div>
+    </div>
+    <div class="app-grid" id="panel-grid">
       <div class="panel" data-panel="left">
         <h1>Dataset A</h1>
         <label class="file-input" data-role="drop-zone">
@@ -302,7 +344,7 @@
           <div class="merkle-levels" data-role="merkle-levels"></div>
         </div>
       </div>
-      <div class="panel" data-panel="right">
+      <div class="panel hidden" data-panel="right">
         <h1>Dataset B</h1>
         <label class="file-input" data-role="drop-zone">
           <input type="file" accept=".csv,text/csv" data-role="file-input" />

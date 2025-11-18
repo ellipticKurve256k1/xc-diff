@@ -308,10 +308,14 @@ class CsvPanel {
 
   setupClearButton() {
     this.elements.clearButton.addEventListener("click", () => {
-      this.elements.fileInput.value = "";
-      this.resetData();
-      this.setStatus("Waiting for a CSV file…");
+      this.clearAll();
     });
+  }
+
+  clearAll() {
+    this.elements.fileInput.value = "";
+    this.resetData();
+    this.setStatus("Waiting for a CSV file…");
   }
 
   renderMerkleTree(treeData) {
@@ -696,6 +700,35 @@ function parseCsv(text) {
   return { headers, rows: dataRows };
 }
 
-document
-  .querySelectorAll(".panel[data-panel]")
-  .forEach((panel) => new CsvPanel(panel));
+document.addEventListener("DOMContentLoaded", () => {
+  const controllers = [];
+  document.querySelectorAll(".panel[data-panel]").forEach((panel) => {
+    controllers.push(new CsvPanel(panel));
+  });
+
+  const toggle = document.getElementById("dual-mode-toggle");
+  const panelGrid = document.getElementById("panel-grid");
+  const rightPanel = document.querySelector('.panel[data-panel="right"]');
+  const rightController = controllers.find(
+    (controller) => controller.root === rightPanel
+  );
+
+  const updateMode = (isDual) => {
+    if (panelGrid) {
+      panelGrid.classList.toggle("dual-mode", isDual);
+    }
+    if (rightPanel) {
+      rightPanel.classList.toggle("hidden", !isDual);
+      if (!isDual) {
+        rightController?.clearAll();
+      }
+    }
+  };
+
+  if (toggle) {
+    updateMode(toggle.checked);
+    toggle.addEventListener("change", () => {
+      updateMode(toggle.checked);
+    });
+  }
+});
