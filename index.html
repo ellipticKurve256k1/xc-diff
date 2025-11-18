@@ -107,11 +107,62 @@
         font-weight: 600;
       }
 
+      .merkle-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .merkle-header h2 {
+        margin: 0;
+      }
+
+      .copy-group {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+      }
+
       .root-hash {
         font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 0.95rem;
         margin-bottom: 16px;
         word-break: break-all;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #root-hash-text {
+        flex: 1 1 auto;
+        min-width: 240px;
+      }
+
+      .copy-button {
+        border: 1px solid #cbd5f5;
+        background: #f8fafc;
+        color: #1e3a8a;
+        border-radius: 9999px;
+        padding: 4px 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+      }
+
+      .copy-button:hover {
+        background: #e0e7ff;
+        color: #1e40af;
+        transform: translateY(-1px);
+      }
+
+      .copy-button:disabled {
+        opacity: 0.6;
+        cursor: default;
+        transform: none;
       }
 
       .root-prefix {
@@ -186,8 +237,16 @@
       </div>
       <div id="column-list" class="columns hidden"></div>
       <div id="merkle-tree" class="merkle-tree hidden">
-        <h2>Merkle Tree</h2>
-        <div id="root-hash" class="root-hash"></div>
+        <div class="merkle-header">
+          <h2>Merkle Tree</h2>
+          <div id="copy-group" class="copy-group hidden">
+            <button id="copy-prefix" class="copy-button">Copy Prefix</button>
+            <button id="copy-full" class="copy-button">Copy Full</button>
+          </div>
+        </div>
+        <div id="root-hash" class="root-hash">
+          <span id="root-hash-text"></span>
+        </div>
         <div id="merkle-levels" class="merkle-levels"></div>
       </div>
     </div>
@@ -199,7 +258,10 @@
       const status = document.getElementById("status");
       const merkleTree = document.getElementById("merkle-tree");
       const merkleLevelsEl = document.getElementById("merkle-levels");
-      const rootHashEl = document.getElementById("root-hash");
+      const rootHashText = document.getElementById("root-hash-text");
+      const copyGroup = document.getElementById("copy-group");
+      const copyPrefixButton = document.getElementById("copy-prefix");
+      const copyFullButton = document.getElementById("copy-full");
 
       const FIELD_CONFIG = [
         { label: "Title", canonical: "title" },
@@ -218,6 +280,8 @@
       let parsedEntries = [];
       let computationVersion = 0;
       let activeFields = [];
+      let currentRootPrefix = "";
+      let currentRootHash = "";
 
       csvInput.addEventListener("change", (event) => {
         const [file] = event.target.files;
@@ -225,6 +289,8 @@
       });
 
       setupDropZone();
+      setupCopyButtons();
+
 
       function buildActiveFields(headers) {
         return FIELD_CONFIG.map((field) => {
@@ -326,6 +392,47 @@
           const [file] = files;
           csvInput.value = "";
           handleFileInput(file);
+        });
+      }
+
+      function setupCopyButtons() {
+        setupCopyButton(copyPrefixButton, () => currentRootPrefix || "");
+        setupCopyButton(copyFullButton, () => currentRootHash || "");
+      }
+
+      function setupCopyButton(button, getValue) {
+        const defaultLabel = button.textContent;
+        button.dataset.defaultLabel = defaultLabel;
+
+        button.addEventListener("click", async () => {
+          const value = getValue();
+          if (!value) {
+            return;
+          }
+          const originalText = defaultLabel;
+          try {
+            await copyTextToClipboard(value);
+            button.textContent = "Copied!";
+            button.disabled = true;
+            setTimeout(() => {
+              button.textContent = originalText;
+              button.disabled = false;
+            }, 1500);
+          } catch (error) {
+            console.error(error);
+            renderStatus("Unable to copy hash. Please try manually.", true);
+          }
+        });
+      }
+
+      function resetCopyButtons() {
+        [copyPrefixButton, copyFullButton].forEach((button) => {
+          if (!button) {
+            return;
+          }
+          const defaultLabel = button.dataset.defaultLabel || button.textContent;
+          button.textContent = defaultLabel;
+          button.disabled = false;
         });
       }
 
@@ -630,10 +737,42 @@
           .join("");
       }
 
+      async function copyTextToClipboard(text) {
+        if (navigator.clipboard?.writeText) {
+          return navigator.clipboard.writeText(text);
+        }
+
+        return new Promise((resolve, reject) => {
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+
+          try {
+            const successful = document.execCommand("copy");
+            document.body.removeChild(textarea);
+            if (successful) {
+              resolve();
+            } else {
+              reject(new Error("Copy command failed"));
+            }
+          } catch (error) {
+            document.body.removeChild(textarea);
+            reject(error);
+          }
+        });
+      }
+
       function renderMerkleTree(treeData) {
         if (!treeData) {
           merkleTree.classList.add("hidden");
-          rootHashEl.textContent = "";
+          rootHashText.textContent = "";
+          copyGroup.classList.add("hidden");
+          resetCopyButtons();
+          currentRootPrefix = "";
+          currentRootHash = "";
           merkleLevelsEl.innerHTML = "";
           return;
         }
@@ -641,7 +780,11 @@
         const { root, levels } = treeData;
         const prefix = root.slice(0, 7);
         const remainder = root.slice(7);
-        rootHashEl.innerHTML = `<span class="root-prefix">${prefix}</span>${remainder}`;
+        rootHashText.innerHTML = `<span class="root-prefix">${prefix}</span>${remainder}`;
+        currentRootPrefix = prefix;
+        currentRootHash = root;
+        copyGroup.classList.remove("hidden");
+        resetCopyButtons();
 
         merkleLevelsEl.innerHTML = "";
         const orderedLevels = [...levels].map((level) => [...level]).reverse();
