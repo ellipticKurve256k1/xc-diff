@@ -395,7 +395,9 @@ class CsvPanel {
 
         const hashValue = node.hash || "";
         const isDiff =
-          realLevelIndex === 0 && highlightSet.has(hashValue);
+          realLevelIndex === 0 &&
+          !node.isDuplicate &&
+          highlightSet.has(hashValue);
         if (isDiff) {
           nodeEl.classList.add("diff");
         }
