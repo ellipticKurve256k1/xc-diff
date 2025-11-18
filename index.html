@@ -119,6 +119,12 @@
         margin: 0;
       }
 
+      .merkle-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
       .copy-group {
         display: inline-flex;
         gap: 8px;
@@ -160,6 +166,30 @@
       }
 
       .copy-button:disabled {
+        opacity: 0.6;
+        cursor: default;
+        transform: none;
+      }
+
+      .clear-button {
+        border: 1px solid #fecdd3;
+        background: #fdf2f8;
+        color: #be123c;
+        border-radius: 9999px;
+        padding: 4px 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+      }
+
+      .clear-button:hover {
+        background: #ffe4e6;
+        color: #9f1239;
+        transform: translateY(-1px);
+      }
+
+      .clear-button:disabled {
         opacity: 0.6;
         cursor: default;
         transform: none;
@@ -239,9 +269,18 @@
       <div id="merkle-tree" class="merkle-tree hidden">
         <div class="merkle-header">
           <h2>Merkle Tree</h2>
-          <div id="copy-group" class="copy-group hidden">
-            <button id="copy-prefix" class="copy-button">Copy Prefix</button>
-            <button id="copy-full" class="copy-button">Copy Full</button>
+          <div id="merkle-controls" class="merkle-controls hidden">
+            <div id="copy-group" class="copy-group">
+              <button id="copy-prefix" class="copy-button" type="button">
+                Copy Prefix
+              </button>
+              <button id="copy-full" class="copy-button" type="button">
+                Copy Full
+              </button>
+            </div>
+            <button id="clear-data" class="clear-button" type="button">
+              Clear
+            </button>
           </div>
         </div>
         <div id="root-hash" class="root-hash">
@@ -259,9 +298,10 @@
       const merkleTree = document.getElementById("merkle-tree");
       const merkleLevelsEl = document.getElementById("merkle-levels");
       const rootHashText = document.getElementById("root-hash-text");
-      const copyGroup = document.getElementById("copy-group");
+      const merkleControls = document.getElementById("merkle-controls");
       const copyPrefixButton = document.getElementById("copy-prefix");
       const copyFullButton = document.getElementById("copy-full");
+      const clearButton = document.getElementById("clear-data");
 
       const FIELD_CONFIG = [
         { label: "Title", canonical: "title" },
@@ -290,6 +330,7 @@
 
       setupDropZone();
       setupCopyButtons();
+      setupClearButton();
 
 
       function buildActiveFields(headers) {
@@ -422,6 +463,14 @@
             console.error(error);
             renderStatus("Unable to copy hash. Please try manually.", true);
           }
+        });
+      }
+
+      function setupClearButton() {
+        clearButton.addEventListener("click", () => {
+          csvInput.value = "";
+          resetData();
+          renderStatus("Waiting for a CSV file…");
         });
       }
 
@@ -768,8 +817,8 @@
       function renderMerkleTree(treeData) {
         if (!treeData) {
           merkleTree.classList.add("hidden");
+          merkleControls.classList.add("hidden");
           rootHashText.textContent = "";
-          copyGroup.classList.add("hidden");
           resetCopyButtons();
           currentRootPrefix = "";
           currentRootHash = "";
@@ -777,13 +826,14 @@
           return;
         }
 
+        merkleTree.classList.remove("hidden");
+        merkleControls.classList.remove("hidden");
         const { root, levels } = treeData;
         const prefix = root.slice(0, 7);
         const remainder = root.slice(7);
         rootHashText.innerHTML = `<span class="root-prefix">${prefix}</span>${remainder}`;
         currentRootPrefix = prefix;
         currentRootHash = root;
-        copyGroup.classList.remove("hidden");
         resetCopyButtons();
 
         merkleLevelsEl.innerHTML = "";
