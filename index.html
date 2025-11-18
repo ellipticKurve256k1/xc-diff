@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CSV Column Selector</title>
+    <title>KeepassXC diff</title>
     <style>
       :root {
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -37,8 +37,7 @@
         font-size: 0.95rem;
         color: #475467;
         display: flex;
-        align-items: center;
-        gap: 8px;
+        justify-content: center;
         border: 1px solid #e4e7ec;
         border-radius: 9999px;
         padding: 6px 14px;
@@ -49,6 +48,15 @@
       .mode-toggle input {
         width: 16px;
         height: 16px;
+      }
+
+      .mode-toggle label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-weight: 600;
+        cursor: pointer;
       }
 
       .app-grid {
@@ -308,7 +316,7 @@
       <div class="mode-toggle">
         <label>
           <input type="checkbox" id="dual-mode-toggle" />
-          Enable dual panels
+          Compare Mode
         </label>
       </div>
     </div>
