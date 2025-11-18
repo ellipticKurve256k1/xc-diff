@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CSV Column Selector</title>
+    <style>
+      :root {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        color: #1f2933;
+        background-color: #f5f7fa;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .panel {
+        width: min(640px, 100%);
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 15px 40px rgba(15, 23, 42, 0.12);
+        padding: 32px;
+      }
+
+      h1 {
+        margin: 0 0 24px;
+        font-size: 1.75rem;
+        font-weight: 600;
+      }
+
+      .file-input {
+        border: 2px dashed #cfd8e3;
+        border-radius: 12px;
+        padding: 32px;
+        text-align: center;
+        transition: border-color 200ms ease;
+        cursor: pointer;
+        margin-bottom: 24px;
+      }
+
+      .file-input input {
+        display: none;
+      }
+
+      .file-input:hover {
+        border-color: #94a3b8;
+      }
+
+      .file-input span {
+        display: block;
+        font-weight: 500;
+        color: #52606d;
+      }
+
+      .status {
+        margin-bottom: 12px;
+        color: #52606d;
+        font-size: 0.95rem;
+      }
+
+      .columns {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .column-item {
+        border: 1px solid #e4e7eb;
+        border-radius: 8px;
+        padding: 12px 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #f9fafb;
+      }
+
+      .column-item input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .column-item span {
+        font-weight: 500;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Pick CSV Columns</h1>
+      <label class="file-input">
+        <input id="csv-input" type="file" accept=".csv,text/csv" />
+        <span>Drop a CSV or click to browse</span>
+      </label>
+      <div id="status" class="status">
+        Waiting for a CSV file…
+      </div>
+      <div id="column-list" class="columns hidden"></div>
+    </div>
+
+    <script>
+      const csvInput = document.getElementById("csv-input");
+      const columnList = document.getElementById("column-list");
+      const status = document.getElementById("status");
+
+      const DEFAULT_COLUMNS = new Set(
+        ["Title", "Username", "Password", "Last Modified"].map((name) =>
+          name.toLowerCase()
+        )
+      );
+
+      csvInput.addEventListener("change", async (event) => {
+        const [file] = event.target.files;
+        if (!file) {
+          return;
+        }
+
+        try {
+          const text = await file.text();
+          const headers = extractHeaders(text);
+          if (!headers.length) {
+            renderStatus("Could not find any headers in that file.", true);
+            return;
+          }
+
+          renderStatus(`Loaded ${file.name}. Select the columns below:`);
+          renderColumns(headers);
+        } catch (error) {
+          console.error(error);
+          renderStatus("Something went wrong while reading the CSV.", true);
+        }
+      });
+
+      function renderColumns(headers) {
+        columnList.innerHTML = "";
+        columnList.classList.remove("hidden");
+
+        for (const header of headers) {
+          const wrapper = document.createElement("label");
+          wrapper.className = "column-item";
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.name = "columns";
+          checkbox.value = header;
+          checkbox.checked = DEFAULT_COLUMNS.has(header.toLowerCase());
+
+          const labelText = document.createElement("span");
+          labelText.textContent = header || "(blank header)";
+
+          wrapper.appendChild(checkbox);
+          wrapper.appendChild(labelText);
+          columnList.appendChild(wrapper);
+        }
+      }
+
+      function renderStatus(message, isError = false) {
+        status.textContent = message;
+        status.style.color = isError ? "#c81e1e" : "#52606d";
+      }
+
+      function extractHeaders(csvText) {
+        const lines = csvText
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        if (!lines.length) {
+          return [];
+        }
+
+        return parseCsvRow(lines[0]);
+      }
+
+      // Basic CSV row parser that respects quoted values.
+      function parseCsvRow(row) {
+        const values = [];
+        let current = "";
+        let isInQuotes = false;
+
+        for (let i = 0; i < row.length; i += 1) {
+          const char = row[i];
+          const nextChar = row[i + 1];
+
+          if (char === '"' && nextChar === '"') {
+            current += '"';
+            i += 1;
+            continue;
+          }
+
+          if (char === '"') {
+            isInQuotes = !isInQuotes;
+            continue;
+          }
+
+          if (char === "," && !isInQuotes) {
+            values.push(current.trim());
+            current = "";
+            continue;
+          }
+
+          current += char;
+        }
+
+        values.push(current.trim());
+        return values;
+      }
+    </script>
+  </body>
+</html>
