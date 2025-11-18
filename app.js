@@ -32,7 +32,12 @@ class CsvPanel {
       computationVersion: 0,
       currentRootPrefix: "",
       currentRootHash: "",
+      latestHashes: [],
+      lastMerkleData: null,
+      highlightedHashes: new Set(),
     };
+
+    this.onDataChange = null;
 
     this.initialize();
   }
@@ -202,11 +207,15 @@ class CsvPanel {
     this.elements.columnList.innerHTML = "";
     this.elements.columnList.classList.add("hidden");
     this.renderMerkleTree(null);
+    this.state.latestHashes = [];
+    this.notifyChange();
   }
 
   async updateResults() {
     if (!this.state.parsedEntries.length) {
+      this.state.latestHashes = [];
       this.renderMerkleTree(null);
+      this.notifyChange();
       return;
     }
 
@@ -215,7 +224,9 @@ class CsvPanel {
     const runId = ++this.state.computationVersion;
 
     if (!selectedFields.length) {
+      this.state.latestHashes = [];
       this.renderMerkleTree(null);
+      this.notifyChange();
       return;
     }
 
@@ -252,7 +263,9 @@ class CsvPanel {
     if (runId !== this.state.computationVersion) {
       return;
     }
+    this.state.latestHashes = hashes;
     this.renderMerkleTree(merkleData);
+    this.notifyChange();
   }
 
   setupCopyButtons() {
@@ -321,6 +334,7 @@ class CsvPanel {
   renderMerkleTree(treeData) {
     const { merkleTree, merkleControls, rootHashText, merkleLevels } =
       this.elements;
+    this.state.lastMerkleData = treeData;
 
     if (!treeData) {
       merkleTree.classList.add("hidden");
@@ -330,6 +344,7 @@ class CsvPanel {
       this.resetCopyButtons();
       this.state.currentRootPrefix = "";
       this.state.currentRootHash = "";
+      this.state.highlightedHashes = new Set();
       return;
     }
 
@@ -347,6 +362,10 @@ class CsvPanel {
 
     merkleLevels.innerHTML = "";
     const orderedLevels = [...levels].map((level) => [...level]).reverse();
+    const highlightSet =
+      this.state.highlightedHashes instanceof Set
+        ? this.state.highlightedHashes
+        : new Set();
 
     orderedLevels.forEach((levelNodes, index) => {
       const realLevelIndex = levels.length - 1 - index;
@@ -374,6 +393,13 @@ class CsvPanel {
           nodeEl.classList.add("duplicate");
         }
 
+        const hashValue = node.hash || "";
+        const isDiff =
+          realLevelIndex === 0 && highlightSet.has(hashValue);
+        if (isDiff) {
+          nodeEl.classList.add("diff");
+        }
+
         if (node.title) {
           const titleEl = document.createElement("span");
           titleEl.className = "node-title";
@@ -392,6 +418,28 @@ class CsvPanel {
       levelEl.appendChild(nodesWrapper);
       merkleLevels.appendChild(levelEl);
     });
+  }
+
+  setChangeHandler(handler) {
+    this.onDataChange = handler;
+  }
+
+  notifyChange() {
+    if (typeof this.onDataChange === "function") {
+      this.onDataChange(this);
+    }
+  }
+
+  getHashes() {
+    return this.state.latestHashes || [];
+  }
+
+  setDifferences(hashSet = new Set()) {
+    this.state.highlightedHashes =
+      hashSet instanceof Set ? new Set(hashSet) : new Set();
+    if (this.state.lastMerkleData) {
+      this.renderMerkleTree(this.state.lastMerkleData);
+    }
   }
 }
 
@@ -701,28 +749,61 @@ function parseCsv(text) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  const controllers = [];
+  const controllers = {};
   document.querySelectorAll(".panel[data-panel]").forEach((panel) => {
-    controllers.push(new CsvPanel(panel));
+    const key = panel.getAttribute("data-panel") || "";
+    controllers[key] = new CsvPanel(panel);
   });
 
+  const leftController = controllers.left;
+  const rightController = controllers.right;
   const toggle = document.getElementById("dual-mode-toggle");
   const panelGrid = document.getElementById("panel-grid");
-  const rightPanel = document.querySelector('.panel[data-panel="right"]');
-  const rightController = controllers.find(
-    (controller) => controller.root === rightPanel
-  );
+
+  const handleComparison = () => {
+    const isDual = toggle?.checked ?? false;
+    if (!isDual || !leftController || !rightController) {
+      rightController?.setDifferences(new Set());
+      return;
+    }
+
+    const leftHashes = new Set(
+      (leftController.getHashes() || [])
+        .map((entry) => entry.hash)
+        .filter((hash) => Boolean(hash))
+    );
+    const rightHashes = rightController.getHashes() || [];
+
+    if (!leftHashes.size || !rightHashes.length) {
+      rightController.setDifferences(new Set());
+      return;
+    }
+
+    const diffSet = new Set();
+    rightHashes.forEach(({ hash }) => {
+      if (hash && !leftHashes.has(hash)) {
+        diffSet.add(hash);
+      }
+    });
+
+    rightController.setDifferences(diffSet);
+  };
+
+  Object.values(controllers).forEach((controller) => {
+    controller.setChangeHandler(handleComparison);
+  });
 
   const updateMode = (isDual) => {
     if (panelGrid) {
       panelGrid.classList.toggle("dual-mode", isDual);
     }
-    if (rightPanel) {
-      rightPanel.classList.toggle("hidden", !isDual);
+    if (rightController?.root) {
+      rightController.root.classList.toggle("hidden", !isDual);
       if (!isDual) {
-        rightController?.clearAll();
+        rightController.clearAll();
       }
     }
+    handleComparison();
   };
 
   if (toggle) {
@@ -730,5 +811,7 @@ document.addEventListener("DOMContentLoaded", () => {
     toggle.addEventListener("change", () => {
       updateMode(toggle.checked);
     });
+  } else {
+    handleComparison();
   }
 });
