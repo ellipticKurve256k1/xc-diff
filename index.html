@@ -36,9 +36,12 @@
       }
 
       .file-input {
+        display: block;
         border: 2px dashed #cfd8e3;
         border-radius: 12px;
         padding: 32px;
+        width: 100%;
+        box-sizing: border-box;
         text-align: center;
         transition: border-color 200ms ease;
         cursor: pointer;
@@ -49,8 +52,10 @@
         display: none;
       }
 
-      .file-input:hover {
+      .file-input:hover,
+      .file-input.drag-over {
         border-color: #94a3b8;
+        background-color: #f8fafc;
       }
 
       .file-input span {
@@ -135,7 +140,7 @@
   <body>
     <div class="panel">
       <h1>Pick CSV Columns</h1>
-      <label class="file-input">
+      <label class="file-input" id="drop-zone">
         <input id="csv-input" type="file" accept=".csv,text/csv" />
         <span>Drop a CSV or click to browse</span>
       </label>
@@ -151,6 +156,7 @@
 
     <script>
       const csvInput = document.getElementById("csv-input");
+      const dropZone = document.getElementById("drop-zone");
       const columnList = document.getElementById("column-list");
       const status = document.getElementById("status");
       const hashResults = document.getElementById("hash-results");
@@ -174,48 +180,12 @@
       let computationVersion = 0;
       let activeFields = [];
 
-      csvInput.addEventListener("change", async (event) => {
+      csvInput.addEventListener("change", (event) => {
         const [file] = event.target.files;
-        if (!file) {
-          return;
-        }
-
-        try {
-          const text = await file.text();
-          const parsed = parseCsv(text);
-          if (!parsed.headers.length) {
-            renderStatus(
-              "Could not find any headers in that file. Please check the CSV.",
-              true
-            );
-            resetData();
-            return;
-          }
-
-          parsedHeaders = parsed.headers;
-          parsedEntries = parsed.rows;
-          activeFields = buildActiveFields(parsedHeaders);
-
-          if (!parsedEntries.length) {
-            renderStatus(
-              `Loaded ${file.name}, but no data rows were found.`,
-              true
-            );
-            resetData();
-            return;
-          }
-
-          renderStatus(
-            `Loaded ${file.name}. Title, Username, Password, and Last Modified are available for hashing.`
-          );
-          renderColumns();
-          updateHashResults();
-        } catch (error) {
-          console.error(error);
-          renderStatus("Something went wrong while reading the CSV.", true);
-          resetData();
-        }
+        handleFileInput(file);
       });
+
+      setupDropZone();
 
       function buildActiveFields(headers) {
         return FIELD_CONFIG.map((field) => {
@@ -285,6 +255,41 @@
         status.style.color = isError ? "#c81e1e" : "#52606d";
       }
 
+      function setupDropZone() {
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          });
+        });
+
+        ["dragenter", "dragover"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add("drag-over");
+            renderStatus("Drop the CSV to load it.");
+          });
+        });
+
+        ["dragleave", "drop"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove("drag-over");
+            if (!parsedEntries.length) {
+              renderStatus("Waiting for a CSV file…");
+            }
+          });
+        });
+
+        dropZone.addEventListener("drop", (event) => {
+          const { files } = event.dataTransfer;
+          if (!files?.length) {
+            return;
+          }
+          const [file] = files;
+          csvInput.value = "";
+          handleFileInput(file);
+        });
+      }
+
       function resetData() {
         computationVersion += 1;
         parsedHeaders = [];
@@ -294,6 +299,48 @@
         columnList.classList.add("hidden");
         hashResults.classList.add("hidden");
         hashList.innerHTML = "";
+      }
+
+      async function handleFileInput(file) {
+        if (!file) {
+          return;
+        }
+
+        try {
+          const text = await file.text();
+          const parsed = parseCsv(text);
+          if (!parsed.headers.length) {
+            renderStatus(
+              "Could not find any headers in that file. Please check the CSV.",
+              true
+            );
+            resetData();
+            return;
+          }
+
+          parsedHeaders = parsed.headers;
+          parsedEntries = parsed.rows;
+          activeFields = buildActiveFields(parsedHeaders);
+
+          if (!parsedEntries.length) {
+            renderStatus(
+              `Loaded ${file.name}, but no data rows were found.`,
+              true
+            );
+            resetData();
+            return;
+          }
+
+          renderStatus(
+            `Loaded ${file.name}. Title, Username, Password, and Last Modified are available for hashing.`
+          );
+          renderColumns();
+          updateHashResults();
+        } catch (error) {
+          console.error(error);
+          renderStatus("Something went wrong while reading the CSV.", true);
+          resetData();
+        }
       }
 
       async function updateHashResults() {
