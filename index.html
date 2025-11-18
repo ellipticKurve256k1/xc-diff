@@ -100,6 +100,17 @@
         font-weight: 600;
       }
 
+      .hash-results li {
+        margin-bottom: 10px;
+      }
+
+      .hash-results .entry-title {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #1f2933;
+      }
+
       .hash-results ol {
         margin: 0;
         padding-left: 20px;
@@ -145,22 +156,23 @@
       const hashResults = document.getElementById("hash-results");
       const hashList = document.getElementById("hash-list");
 
+      const FIELD_CONFIG = [
+        { label: "Title", canonical: "title" },
+        { label: "Username", canonical: "username" },
+        { label: "Password", canonical: "password" },
+        { label: "Last Modified", canonical: "last modified" },
+      ];
+
       const DEFAULT_COLUMNS = new Set(
-        ["Title", "Username", "Password", "Last Modified"].map((name) =>
-          name.toLowerCase()
-        )
+        FIELD_CONFIG.map((field) => field.canonical)
       );
 
-      const HASH_FIELDS = [
-        "Title",
-        "Username",
-        "Password",
-        "Last Modified",
-      ].map((field) => field.toLowerCase());
+      const HASH_FIELDS = FIELD_CONFIG.map((field) => field.canonical);
 
       let parsedHeaders = [];
       let parsedEntries = [];
       let computationVersion = 0;
+      let activeFields = [];
 
       csvInput.addEventListener("change", async (event) => {
         const [file] = event.target.files;
@@ -182,6 +194,7 @@
 
           parsedHeaders = parsed.headers;
           parsedEntries = parsed.rows;
+          activeFields = buildActiveFields(parsedHeaders);
 
           if (!parsedEntries.length) {
             renderStatus(
@@ -193,9 +206,9 @@
           }
 
           renderStatus(
-            `Loaded ${file.name}. Select the columns to normalize and hash.`
+            `Loaded ${file.name}. Title, Username, Password, and Last Modified are available for hashing.`
           );
-          renderColumns(parsedHeaders);
+          renderColumns();
           updateHashResults();
         } catch (error) {
           console.error(error);
@@ -204,25 +217,46 @@
         }
       });
 
-      function renderColumns(headers) {
+      function buildActiveFields(headers) {
+        return FIELD_CONFIG.map((field) => {
+          const headerName =
+            headers.find(
+              (header) => toCanonical(header) === field.canonical
+            ) ?? null;
+          return { ...field, headerName };
+        });
+      }
+
+      function renderColumns() {
+        if (!activeFields.length) {
+          columnList.classList.add("hidden");
+          columnList.innerHTML = "";
+          return;
+        }
+
         columnList.innerHTML = "";
         columnList.classList.remove("hidden");
 
-        for (const header of headers) {
+        for (const field of activeFields) {
           const wrapper = document.createElement("label");
           wrapper.className = "column-item";
 
           const checkbox = document.createElement("input");
           checkbox.type = "checkbox";
           checkbox.name = "columns";
-          checkbox.value = header;
-          checkbox.checked = DEFAULT_COLUMNS.has(header.toLowerCase());
+          checkbox.dataset.field = field.canonical;
+          const hasHeader = Boolean(field.headerName);
+          checkbox.disabled = !hasHeader;
+          checkbox.checked =
+            hasHeader && DEFAULT_COLUMNS.has(field.canonical);
           checkbox.addEventListener("change", () => {
             updateHashResults();
           });
 
           const labelText = document.createElement("span");
-          labelText.textContent = header || "(blank header)";
+          labelText.textContent = hasHeader
+            ? field.label
+            : `${field.label} (missing)`;
 
           wrapper.appendChild(checkbox);
           wrapper.appendChild(labelText);
@@ -230,10 +264,20 @@
         }
       }
 
-      function getSelectedColumns() {
-        return Array.from(
-          columnList.querySelectorAll('input[type="checkbox"]:checked')
-        ).map((input) => input.value);
+      function getSelectedFields() {
+        const selected = [];
+        for (const field of activeFields) {
+          if (!field.headerName) {
+            continue;
+          }
+          const checkbox = columnList.querySelector(
+            `input[type="checkbox"][data-field="${field.canonical}"]`
+          );
+          if (checkbox?.checked) {
+            selected.push(field);
+          }
+        }
+        return selected;
       }
 
       function renderStatus(message, isError = false) {
@@ -245,6 +289,7 @@
         computationVersion += 1;
         parsedHeaders = [];
         parsedEntries = [];
+        activeFields = [];
         columnList.innerHTML = "";
         columnList.classList.add("hidden");
         hashResults.classList.add("hidden");
@@ -258,24 +303,41 @@
           return;
         }
 
-        const selectedColumns = getSelectedColumns();
+        const selectedFields = getSelectedFields();
+        const selectedCanonical = selectedFields.map(
+          (field) => field.canonical
+        );
         const runId = ++computationVersion;
 
+        if (!selectedFields.length) {
+          hashResults.classList.add("hidden");
+          hashList.innerHTML = "";
+          return;
+        }
+
         const hashes = [];
+        const titleField = activeFields.find(
+          (field) => field.canonical === "title" && field.headerName
+        );
+
         for (const entry of parsedEntries) {
           if (runId !== computationVersion) {
             return;
           }
 
-          const normalized = normalizeEntry(entry, selectedColumns);
-          const hashInput = buildHashInput(normalized);
+          const normalized = normalizeEntry(entry, selectedFields);
+          const hashInput = buildHashInput(normalized, selectedCanonical);
           const hash = await sha256Hex(hashInput);
 
           if (runId !== computationVersion) {
             return;
           }
 
-          hashes.push(hash);
+          const titleValue = titleField
+            ? normalizeText(entry[titleField.headerName])
+            : "";
+
+          hashes.push({ hash, title: titleValue });
         }
 
         if (runId !== computationVersion) {
@@ -285,16 +347,13 @@
         renderHashes(hashes);
       }
 
-      function normalizeEntry(entry, selectedColumns) {
+      function normalizeEntry(entry, selectedFields) {
         const normalized = {};
-        const columnsToProcess = selectedColumns.length
-          ? selectedColumns
-          : [];
 
-        for (const header of columnsToProcess) {
-          const canonical = toCanonical(header);
-          const rawValue = entry[header];
-          normalized[header] =
+        for (const field of selectedFields) {
+          const canonical = field.canonical;
+          const rawValue = entry[field.headerName];
+          normalized[canonical] =
             canonical === "last modified"
               ? normalizeDate(rawValue)
               : normalizeText(rawValue);
@@ -303,26 +362,18 @@
         return normalized;
       }
 
-      function buildHashInput(normalizedEntry) {
+      function buildHashInput(normalizedEntry, selectedCanonical) {
+        const selectedSet = new Set(selectedCanonical);
         const parts = [];
 
         for (const field of HASH_FIELDS) {
-          const matchingValue = findNormalizedValue(normalizedEntry, field);
-          if (matchingValue !== null) {
-            parts.push(matchingValue);
+          if (!selectedSet.has(field)) {
+            continue;
           }
+          parts.push(normalizedEntry[field] ?? "");
         }
 
         return parts.join("|");
-      }
-
-      function findNormalizedValue(normalizedEntry, canonicalField) {
-        for (const [header, value] of Object.entries(normalizedEntry)) {
-          if (toCanonical(header) === canonicalField) {
-            return value;
-          }
-        }
-        return null;
       }
 
       function normalizeText(value) {
@@ -420,9 +471,19 @@
       function renderHashes(hashes) {
         hashList.innerHTML = "";
 
-        hashes.forEach((hash, index) => {
+        hashes.forEach(({ hash, title }, index) => {
           const item = document.createElement("li");
-          item.innerHTML = `Entry ${index + 1}: <code>${hash}</code>`;
+
+          const titleLine = document.createElement("span");
+          titleLine.className = "entry-title";
+          const titleText = title || "(no title)";
+          titleLine.textContent = `Entry ${index + 1} — Title: ${titleText}`;
+
+          const hashCode = document.createElement("code");
+          hashCode.textContent = hash;
+
+          item.appendChild(titleLine);
+          item.appendChild(hashCode);
           hashList.appendChild(item);
         });
 
