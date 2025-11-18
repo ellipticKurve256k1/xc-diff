@@ -95,43 +95,6 @@
         font-weight: 500;
       }
 
-      .hash-results {
-        margin-top: 28px;
-      }
-
-      .hash-results h2 {
-        margin: 0 0 12px;
-        font-size: 1.25rem;
-        font-weight: 600;
-      }
-
-      .hash-results li {
-        margin-bottom: 10px;
-      }
-
-      .hash-results .entry-title {
-        display: block;
-        font-weight: 600;
-        margin-bottom: 4px;
-        color: #1f2933;
-      }
-
-      .hash-results ol {
-        margin: 0;
-        padding-left: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .hash-results code {
-        font-size: 0.95rem;
-        background: #f3f4f6;
-        padding: 2px 6px;
-        border-radius: 4px;
-        color: #111827;
-      }
-
       .merkle-tree {
         margin-top: 32px;
         padding-top: 24px;
@@ -222,10 +185,6 @@
         Waiting for a CSV file…
       </div>
       <div id="column-list" class="columns hidden"></div>
-      <div id="hash-results" class="hash-results hidden">
-        <h2>SHA-256 Hashes</h2>
-        <ol id="hash-list"></ol>
-      </div>
       <div id="merkle-tree" class="merkle-tree hidden">
         <h2>Merkle Tree</h2>
         <div id="root-hash" class="root-hash"></div>
@@ -238,8 +197,6 @@
       const dropZone = document.getElementById("drop-zone");
       const columnList = document.getElementById("column-list");
       const status = document.getElementById("status");
-      const hashResults = document.getElementById("hash-results");
-      const hashList = document.getElementById("hash-list");
       const merkleTree = document.getElementById("merkle-tree");
       const merkleLevelsEl = document.getElementById("merkle-levels");
       const rootHashEl = document.getElementById("root-hash");
@@ -379,8 +336,6 @@
         activeFields = [];
         columnList.innerHTML = "";
         columnList.classList.add("hidden");
-        hashResults.classList.add("hidden");
-        hashList.innerHTML = "";
         renderMerkleTree(null);
       }
 
@@ -428,8 +383,6 @@
 
       async function updateHashResults() {
         if (!parsedEntries.length) {
-          hashResults.classList.add("hidden");
-          hashList.innerHTML = "";
           renderMerkleTree(null);
           return;
         }
@@ -441,8 +394,6 @@
         const runId = ++computationVersion;
 
         if (!selectedFields.length) {
-          hashResults.classList.add("hidden");
-          hashList.innerHTML = "";
           renderMerkleTree(null);
           return;
         }
@@ -475,8 +426,6 @@
         if (runId !== computationVersion) {
           return;
         }
-
-        renderHashes(hashes);
 
         const merkleData = await buildMerkleTree(hashes);
         if (runId !== computationVersion) {
@@ -604,28 +553,6 @@
         return Array.from(new Uint8Array(digest))
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
-      }
-
-      function renderHashes(hashes) {
-        hashList.innerHTML = "";
-
-        hashes.forEach(({ hash, title }, index) => {
-          const item = document.createElement("li");
-
-          const titleLine = document.createElement("span");
-          titleLine.className = "entry-title";
-          const titleText = title || "(no title)";
-          titleLine.textContent = `Entry ${index + 1} — Title: ${titleText}`;
-
-          const hashCode = document.createElement("code");
-          hashCode.textContent = hash;
-
-          item.appendChild(titleLine);
-          item.appendChild(hashCode);
-          hashList.appendChild(item);
-        });
-
-        hashResults.classList.toggle("hidden", hashes.length === 0);
       }
 
       async function buildMerkleTree(leaves) {
