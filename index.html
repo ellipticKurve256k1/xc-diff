@@ -90,6 +90,32 @@
         font-weight: 500;
       }
 
+      .hash-results {
+        margin-top: 28px;
+      }
+
+      .hash-results h2 {
+        margin: 0 0 12px;
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      .hash-results ol {
+        margin: 0;
+        padding-left: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .hash-results code {
+        font-size: 0.95rem;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #111827;
+      }
+
       .hidden {
         display: none;
       }
@@ -106,18 +132,35 @@
         Waiting for a CSV file…
       </div>
       <div id="column-list" class="columns hidden"></div>
+      <div id="hash-results" class="hash-results hidden">
+        <h2>SHA-256 Hashes</h2>
+        <ol id="hash-list"></ol>
+      </div>
     </div>
 
     <script>
       const csvInput = document.getElementById("csv-input");
       const columnList = document.getElementById("column-list");
       const status = document.getElementById("status");
+      const hashResults = document.getElementById("hash-results");
+      const hashList = document.getElementById("hash-list");
 
       const DEFAULT_COLUMNS = new Set(
         ["Title", "Username", "Password", "Last Modified"].map((name) =>
           name.toLowerCase()
         )
       );
+
+      const HASH_FIELDS = [
+        "Title",
+        "Username",
+        "Password",
+        "Last Modified",
+      ].map((field) => field.toLowerCase());
+
+      let parsedHeaders = [];
+      let parsedEntries = [];
+      let computationVersion = 0;
 
       csvInput.addEventListener("change", async (event) => {
         const [file] = event.target.files;
@@ -127,17 +170,37 @@
 
         try {
           const text = await file.text();
-          const headers = extractHeaders(text);
-          if (!headers.length) {
-            renderStatus("Could not find any headers in that file.", true);
+          const parsed = parseCsv(text);
+          if (!parsed.headers.length) {
+            renderStatus(
+              "Could not find any headers in that file. Please check the CSV.",
+              true
+            );
+            resetData();
             return;
           }
 
-          renderStatus(`Loaded ${file.name}. Select the columns below:`);
-          renderColumns(headers);
+          parsedHeaders = parsed.headers;
+          parsedEntries = parsed.rows;
+
+          if (!parsedEntries.length) {
+            renderStatus(
+              `Loaded ${file.name}, but no data rows were found.`,
+              true
+            );
+            resetData();
+            return;
+          }
+
+          renderStatus(
+            `Loaded ${file.name}. Select the columns to normalize and hash.`
+          );
+          renderColumns(parsedHeaders);
+          updateHashResults();
         } catch (error) {
           console.error(error);
           renderStatus("Something went wrong while reading the CSV.", true);
+          resetData();
         }
       });
 
@@ -154,6 +217,9 @@
           checkbox.name = "columns";
           checkbox.value = header;
           checkbox.checked = DEFAULT_COLUMNS.has(header.toLowerCase());
+          checkbox.addEventListener("change", () => {
+            updateHashResults();
+          });
 
           const labelText = document.createElement("span");
           labelText.textContent = header || "(blank header)";
@@ -164,36 +230,243 @@
         }
       }
 
+      function getSelectedColumns() {
+        return Array.from(
+          columnList.querySelectorAll('input[type="checkbox"]:checked')
+        ).map((input) => input.value);
+      }
+
       function renderStatus(message, isError = false) {
         status.textContent = message;
         status.style.color = isError ? "#c81e1e" : "#52606d";
       }
 
-      function extractHeaders(csvText) {
-        const lines = csvText
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean);
-
-        if (!lines.length) {
-          return [];
-        }
-
-        return parseCsvRow(lines[0]);
+      function resetData() {
+        computationVersion += 1;
+        parsedHeaders = [];
+        parsedEntries = [];
+        columnList.innerHTML = "";
+        columnList.classList.add("hidden");
+        hashResults.classList.add("hidden");
+        hashList.innerHTML = "";
       }
 
-      // Basic CSV row parser that respects quoted values.
-      function parseCsvRow(row) {
-        const values = [];
-        let current = "";
+      async function updateHashResults() {
+        if (!parsedEntries.length) {
+          hashResults.classList.add("hidden");
+          hashList.innerHTML = "";
+          return;
+        }
+
+        const selectedColumns = getSelectedColumns();
+        const runId = ++computationVersion;
+
+        const hashes = [];
+        for (const entry of parsedEntries) {
+          if (runId !== computationVersion) {
+            return;
+          }
+
+          const normalized = normalizeEntry(entry, selectedColumns);
+          const hashInput = buildHashInput(normalized);
+          const hash = await sha256Hex(hashInput);
+
+          if (runId !== computationVersion) {
+            return;
+          }
+
+          hashes.push(hash);
+        }
+
+        if (runId !== computationVersion) {
+          return;
+        }
+
+        renderHashes(hashes);
+      }
+
+      function normalizeEntry(entry, selectedColumns) {
+        const normalized = {};
+        const columnsToProcess = selectedColumns.length
+          ? selectedColumns
+          : [];
+
+        for (const header of columnsToProcess) {
+          const canonical = toCanonical(header);
+          const rawValue = entry[header];
+          normalized[header] =
+            canonical === "last modified"
+              ? normalizeDate(rawValue)
+              : normalizeText(rawValue);
+        }
+
+        return normalized;
+      }
+
+      function buildHashInput(normalizedEntry) {
+        const parts = [];
+
+        for (const field of HASH_FIELDS) {
+          const matchingValue = findNormalizedValue(normalizedEntry, field);
+          if (matchingValue !== null) {
+            parts.push(matchingValue);
+          }
+        }
+
+        return parts.join("|");
+      }
+
+      function findNormalizedValue(normalizedEntry, canonicalField) {
+        for (const [header, value] of Object.entries(normalizedEntry)) {
+          if (toCanonical(header) === canonicalField) {
+            return value;
+          }
+        }
+        return null;
+      }
+
+      function normalizeText(value) {
+        if (value === null || value === undefined) {
+          return "";
+        }
+        const text = String(value).trim();
+        if (!text) {
+          return "";
+        }
+        return text.replace(/\s+/g, " ").normalize("NFC");
+      }
+
+      function normalizeDate(value) {
+        const normalizedText = normalizeText(value);
+        if (!normalizedText) {
+          return "";
+        }
+
+        const parsedDate = parseFlexibleDate(normalizedText);
+        if (!parsedDate) {
+          return "";
+        }
+
+        return formatUtcIso(parsedDate);
+      }
+
+      function parseFlexibleDate(value) {
+        const isoMatch = value.match(
+          /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?(?: ?(Z|[+-]\d{2}:\d{2}))?$/i
+        );
+
+        if (isoMatch) {
+          const [, year, month, day, hour, minute, second, millisecond, zone] =
+            isoMatch;
+          const ms = millisecond
+            ? millisecond.padEnd(3, "0").slice(0, 3)
+            : "000";
+          const baseTime = [
+            hour ?? "00",
+            minute ?? "00",
+            second ?? "00",
+          ].map((segment) => segment.padStart(2, "0"));
+          const core = `${year}-${month}-${day}T${baseTime.join(":")}.${
+            ms || "000"
+          }`;
+
+          if (zone) {
+            const isoString = `${core}${zone === "Z" ? "Z" : zone}`;
+            const offsetDate = new Date(isoString);
+            if (!Number.isNaN(offsetDate.getTime())) {
+              return offsetDate;
+            }
+          } else {
+            const localDate = new Date(
+              Number(year),
+              Number(month) - 1,
+              Number(day),
+              Number(hour ?? 0),
+              Number(minute ?? 0),
+              Number(second ?? 0),
+              Number(ms)
+            );
+            if (!Number.isNaN(localDate.getTime())) {
+              return localDate;
+            }
+          }
+        }
+
+        const fallbackTimestamp = Date.parse(value);
+        if (!Number.isNaN(fallbackTimestamp)) {
+          return new Date(fallbackTimestamp);
+        }
+
+        return null;
+      }
+
+      function formatUtcIso(date) {
+        return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+      }
+
+      function toCanonical(value) {
+        return (value || "").trim().toLowerCase();
+      }
+
+      async function sha256Hex(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const digest = await crypto.subtle.digest("SHA-256", data);
+        return Array.from(new Uint8Array(digest))
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+      }
+
+      function renderHashes(hashes) {
+        hashList.innerHTML = "";
+
+        hashes.forEach((hash, index) => {
+          const item = document.createElement("li");
+          item.innerHTML = `Entry ${index + 1}: <code>${hash}</code>`;
+          hashList.appendChild(item);
+        });
+
+        hashResults.classList.toggle("hidden", hashes.length === 0);
+      }
+
+      function parseCsv(text) {
+        const source =
+          text && text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+        const rows = [];
+        let currentRow = [];
+        let currentValue = "";
         let isInQuotes = false;
 
-        for (let i = 0; i < row.length; i += 1) {
-          const char = row[i];
-          const nextChar = row[i + 1];
+        const pushValue = () => {
+          currentRow.push(currentValue);
+          currentValue = "";
+        };
+
+        const pushRowIfNeeded = () => {
+          if (
+            currentRow.length === 1 &&
+            (currentRow[0] ?? "").length === 0 &&
+            rows.length === 0
+          ) {
+            currentRow = [];
+            return;
+          }
+
+          const shouldAddRow =
+            currentRow.length > 1 || (currentRow.length === 1 && currentRow[0] !== "");
+
+          if (shouldAddRow) {
+            rows.push(currentRow);
+          }
+          currentRow = [];
+        };
+
+        for (let i = 0; i < source.length; i += 1) {
+          const char = source[i];
+          const nextChar = source[i + 1];
 
           if (char === '"' && nextChar === '"') {
-            current += '"';
+            currentValue += '"';
             i += 1;
             continue;
           }
@@ -204,16 +477,45 @@
           }
 
           if (char === "," && !isInQuotes) {
-            values.push(current.trim());
-            current = "";
+            pushValue();
             continue;
           }
 
-          current += char;
+          if ((char === "\n" || char === "\r") && !isInQuotes) {
+            pushValue();
+            if (char === "\r" && nextChar === "\n") {
+              i += 1;
+            }
+            pushRowIfNeeded();
+            continue;
+          }
+
+          currentValue += char;
         }
 
-        values.push(current.trim());
-        return values;
+        pushValue();
+        if (currentRow.length) {
+          const shouldAddRow =
+            currentRow.length > 1 || (currentRow.length === 1 && currentRow[0] !== "");
+          if (shouldAddRow) {
+            rows.push(currentRow);
+          }
+        }
+
+        if (!rows.length) {
+          return { headers: [], rows: [] };
+        }
+
+        const headers = rows[0];
+        const dataRows = rows.slice(1).map((row) => {
+          const entry = {};
+          headers.forEach((header, index) => {
+            entry[header] = row[index] ?? "";
+          });
+          return entry;
+        });
+
+        return { headers, rows: dataRows };
       }
     </script>
   </body>
