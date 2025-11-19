@@ -30,7 +30,10 @@
         margin: 0 auto 24px;
         display: flex;
         justify-content: center;
+        align-items: center;
+        gap: 16px;
         text-align: center;
+        flex-wrap: wrap;
       }
 
       .mode-toggle {
@@ -57,6 +60,54 @@
         gap: 8px;
         font-weight: 600;
         cursor: pointer;
+      }
+
+      .comparison-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 6px 14px;
+        border-radius: 9999px;
+        border: 1px solid #e4e7ec;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.07);
+      }
+
+      .comparison-status .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #94a3b8;
+      }
+
+      .comparison-status.pending {
+        color: #475467;
+      }
+
+      .comparison-status.pending .status-dot {
+        background: #94a3b8;
+      }
+
+      .comparison-status.match {
+        border-color: #4ade80;
+        background: #ecfdf5;
+        color: #15803d;
+      }
+
+      .comparison-status.match .status-dot {
+        background: #22c55e;
+      }
+
+      .comparison-status.mismatch {
+        border-color: #fda4af;
+        background: #fef2f2;
+        color: #b91c1c;
+      }
+
+      .comparison-status.mismatch .status-dot {
+        background: #f87171;
       }
 
       .app-grid {
@@ -328,6 +379,10 @@
           <input type="checkbox" id="dual-mode-toggle" />
           Compare Mode
         </label>
+      </div>
+      <div class="comparison-status hidden" id="comparison-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span data-role="status-text">Waiting for both hashes…</span>
       </div>
     </div>
     <div class="app-grid" id="panel-grid">

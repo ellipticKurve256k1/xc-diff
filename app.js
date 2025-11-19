@@ -450,6 +450,10 @@ class CsvPanel {
     return this.state.latestHashes || [];
   }
 
+  getRootHash() {
+    return this.state.currentRootHash || "";
+  }
+
   setDifferences(hashSet = new Set()) {
     this.state.highlightedHashes =
       hashSet instanceof Set ? new Set(hashSet) : new Set();
@@ -797,12 +801,52 @@ document.addEventListener("DOMContentLoaded", () => {
   const rightController = controllers.right;
   const toggle = document.getElementById("dual-mode-toggle");
   const panelGrid = document.getElementById("panel-grid");
+  const comparisonStatus = document.getElementById("comparison-status");
+  const comparisonStatusText =
+    comparisonStatus?.querySelector('[data-role="status-text"]') ?? null;
+
+  const setComparisonStatus = (state) => {
+    if (!comparisonStatus || !comparisonStatusText) {
+      return;
+    }
+    comparisonStatus.classList.remove("match", "mismatch", "pending");
+    if (state === "hidden") {
+      comparisonStatus.classList.add("hidden");
+      return;
+    }
+    comparisonStatus.classList.remove("hidden");
+    if (state === "match") {
+      comparisonStatus.classList.add("match");
+      comparisonStatusText.textContent = "Databases are identical";
+      return;
+    }
+    if (state === "mismatch") {
+      comparisonStatus.classList.add("mismatch");
+      comparisonStatusText.textContent = "Databases are not identical";
+      return;
+    }
+    comparisonStatus.classList.add("pending");
+    comparisonStatusText.textContent = "Waiting for both hashes…";
+  };
+
+  setComparisonStatus("hidden");
 
   const handleComparison = () => {
     const isDual = toggle?.checked ?? false;
     if (!isDual || !leftController || !rightController) {
+      setComparisonStatus("hidden");
       rightController?.setDifferences(new Set());
       return;
+    }
+
+    const leftRoot = leftController.getRootHash?.();
+    const rightRoot = rightController.getRootHash?.();
+    if (!leftRoot || !rightRoot) {
+      setComparisonStatus("pending");
+    } else if (leftRoot === rightRoot) {
+      setComparisonStatus("match");
+    } else {
+      setComparisonStatus("mismatch");
     }
 
     const leftHashes = new Set(
