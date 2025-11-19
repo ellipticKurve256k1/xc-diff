@@ -835,6 +835,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isDual = toggle?.checked ?? false;
     if (!isDual || !leftController || !rightController) {
       setComparisonStatus("hidden");
+      leftController?.setDifferences(new Set());
       rightController?.setDifferences(new Set());
       return;
     }
@@ -849,26 +850,31 @@ document.addEventListener("DOMContentLoaded", () => {
       setComparisonStatus("mismatch");
     }
 
+    const leftEntries = leftController.getHashes() || [];
+    const rightEntries = rightController.getHashes() || [];
     const leftHashes = new Set(
-      (leftController.getHashes() || [])
-        .map((entry) => entry.hash)
-        .filter((hash) => Boolean(hash))
+      leftEntries.map((entry) => entry.hash).filter((hash) => Boolean(hash))
     );
-    const rightHashes = rightController.getHashes() || [];
+    const rightHashes = new Set(
+      rightEntries.map((entry) => entry.hash).filter((hash) => Boolean(hash))
+    );
 
-    if (!leftHashes.size || !rightHashes.length) {
-      rightController.setDifferences(new Set());
-      return;
-    }
-
-    const diffSet = new Set();
-    rightHashes.forEach(({ hash }) => {
+    const missingOnLeft = new Set();
+    rightEntries.forEach(({ hash }) => {
       if (hash && !leftHashes.has(hash)) {
-        diffSet.add(hash);
+        missingOnLeft.add(hash);
       }
     });
 
-    rightController.setDifferences(diffSet);
+    const missingOnRight = new Set();
+    leftEntries.forEach(({ hash }) => {
+      if (hash && !rightHashes.has(hash)) {
+        missingOnRight.add(hash);
+      }
+    });
+
+    leftController.setDifferences(missingOnRight);
+    rightController.setDifferences(missingOnLeft);
   };
 
   Object.values(controllers).forEach((controller) => {
