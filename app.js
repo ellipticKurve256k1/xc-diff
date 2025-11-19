@@ -242,7 +242,14 @@ class CsvPanel {
 
       const normalized = normalizeEntry(entry, selectedFields);
       const hashInput = buildHashInput(normalized, selectedCanonical);
-      const hash = await sha256Hex(hashInput);
+      const merkleHash = await sha256Hex(hashInput);
+
+      if (runId !== this.state.computationVersion) {
+        return;
+      }
+
+      const canonicalJson = canonicalizeEntry(entry, selectedFields);
+      const canonicalHash = await sha256Hex(canonicalJson);
 
       if (runId !== this.state.computationVersion) {
         return;
@@ -252,18 +259,25 @@ class CsvPanel {
         ? normalizeText(entry[titleField.headerName])
         : "";
 
-      hashes.push({ hash, title: titleValue });
+      hashes.push({ merkleHash, canonicalHash, title: titleValue });
     }
 
     if (runId !== this.state.computationVersion) {
       return;
     }
 
-    const merkleData = await buildMerkleTree(hashes);
+    hashes.sort((a, b) => a.canonicalHash.localeCompare(b.canonicalHash));
+
+    const leafNodes = hashes.map(({ merkleHash, title }) => ({
+      hash: merkleHash,
+      title,
+    }));
+
+    const merkleData = await buildMerkleTree(leafNodes);
     if (runId !== this.state.computationVersion) {
       return;
     }
-    this.state.latestHashes = hashes;
+    this.state.latestHashes = leafNodes;
     this.renderMerkleTree(merkleData);
     this.notifyChange();
   }
@@ -466,6 +480,28 @@ function normalizeEntry(entry, selectedFields) {
   }
 
   return normalized;
+}
+
+function canonicalizeEntry(entry, selectedFields) {
+  const canonicalObject = {};
+  const sortedFields = [...selectedFields].sort((a, b) =>
+    a.canonical.localeCompare(b.canonical)
+  );
+
+  for (const field of sortedFields) {
+    if (!field.headerName) {
+      continue;
+    }
+
+    const canonical = field.canonical;
+    const rawValue = entry[field.headerName];
+    canonicalObject[canonical] =
+      canonical === "last modified"
+        ? normalizeDate(rawValue)
+        : normalizeText(rawValue);
+  }
+
+  return JSON.stringify(canonicalObject);
 }
 
 function buildHashInput(normalizedEntry, selectedCanonical) {
