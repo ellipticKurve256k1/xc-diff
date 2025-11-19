@@ -84,8 +84,10 @@ class CsvPanel {
         return;
       }
 
-      this.setStatus(
-        `Loaded ${file.name}. Title, Username, Password, and Last Modified are available for hashing.`
+      this.setLoadedStatus(
+        file.name,
+        this.state.parsedEntries.length,
+        "Title, Username, Password, and Last Modified are available for hashing."
       );
       this.renderColumns();
       this.updateResults();
@@ -160,6 +162,42 @@ class CsvPanel {
   setStatus(message, isError = false) {
     this.elements.status.textContent = message;
     this.elements.status.style.color = isError ? "#c81e1e" : "#52606d";
+  }
+
+  setLoadedStatus(fileName, entryCount, note = "") {
+    const statusEl = this.elements.status;
+    statusEl.style.color = "#52606d";
+    statusEl.innerHTML = "";
+
+    const line = document.createElement("div");
+    line.className = "status-line";
+
+    const loadedText = document.createElement("span");
+    loadedText.textContent = "Loaded";
+    line.appendChild(loadedText);
+
+    const fileBadge = document.createElement("span");
+    fileBadge.className = "status-badge filename-pill";
+    fileBadge.textContent = fileName || "Unknown file";
+    line.appendChild(fileBadge);
+
+    const withText = document.createElement("span");
+    withText.textContent = "with";
+    line.appendChild(withText);
+
+    const countBadge = document.createElement("span");
+    countBadge.className = "status-badge entry-count-pill";
+    countBadge.textContent = formatEntryCount(entryCount);
+    line.appendChild(countBadge);
+
+    statusEl.appendChild(line);
+
+    if (note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "status-subtext";
+      noteEl.textContent = note;
+      statusEl.appendChild(noteEl);
+    }
   }
 
   setupDropZone() {
@@ -469,6 +507,13 @@ function buildActiveFields(headers) {
       headers.find((header) => toCanonical(header) === field.canonical) ?? null;
     return { ...field, headerName };
   });
+}
+
+function formatEntryCount(count) {
+  const numeric = Number(count);
+  const safeCount = Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+  const label = safeCount === 1 ? "entry" : "entries";
+  return `${safeCount.toLocaleString()} ${label}`;
 }
 
 function normalizeEntry(entry, selectedFields) {

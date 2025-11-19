@@ -177,6 +177,39 @@
         font-size: 0.95rem;
       }
 
+      .status .status-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .status .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.85rem;
+      }
+
+      .status .filename-pill {
+        background: #1d4ed8;
+        color: #fff;
+      }
+
+      .status .entry-count-pill {
+        background: #0f766e;
+        color: #fff;
+      }
+
+      .status .status-subtext {
+        margin-top: 6px;
+        display: block;
+        font-size: 0.85rem;
+        color: #475467;
+      }
+
       .columns {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
