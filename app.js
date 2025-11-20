@@ -6,7 +6,6 @@ const FIELD_CONFIG = [
 ];
 
 const DEFAULT_COLUMNS = new Set(FIELD_CONFIG.map((field) => field.canonical));
-const HASH_FIELDS = FIELD_CONFIG.map((field) => field.canonical);
 
 class CsvPanel {
   constructor(root) {
@@ -87,7 +86,7 @@ class CsvPanel {
       this.setLoadedStatus(
         file.name,
         this.state.parsedEntries.length,
-        "Title, Username, Password, and Last Modified are available for hashing."
+        "All columns (excluding Group) can be hashed. Title, Username, Password, and Last Modified are selected by default."
       );
       this.renderColumns();
       this.updateResults();
@@ -502,11 +501,32 @@ class CsvPanel {
 }
 
 function buildActiveFields(headers) {
-  return FIELD_CONFIG.map((field) => {
-    const headerName =
-      headers.find((header) => toCanonical(header) === field.canonical) ?? null;
+  const canonicalHeaderMap = new Map();
+  headers.forEach((header) => {
+    const canonical = toCanonical(header);
+    if (!canonical || canonical === "group") {
+      return;
+    }
+    if (!canonicalHeaderMap.has(canonical)) {
+      canonicalHeaderMap.set(canonical, header);
+    }
+  });
+
+  const baseFields = FIELD_CONFIG.map((field) => {
+    const headerName = canonicalHeaderMap.get(field.canonical) ?? null;
+    canonicalHeaderMap.delete(field.canonical);
     return { ...field, headerName };
   });
+
+  const additionalFields = Array.from(canonicalHeaderMap.entries())
+    .map(([canonical, headerName]) => ({
+      label: headerName,
+      canonical,
+      headerName,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+
+  return [...baseFields, ...additionalFields];
 }
 
 function formatEntryCount(count) {
@@ -554,17 +574,11 @@ function canonicalizeEntry(entry, selectedFields) {
 }
 
 function buildHashInput(normalizedEntry, selectedCanonical) {
-  const selectedSet = new Set(selectedCanonical);
-  const parts = [];
-
-  for (const field of HASH_FIELDS) {
-    if (!selectedSet.has(field)) {
-      continue;
-    }
-    parts.push(normalizedEntry[field] ?? "");
+  if (!selectedCanonical || !selectedCanonical.length) {
+    return "";
   }
 
-  return parts.join("|");
+  return selectedCanonical.map((field) => normalizedEntry[field] ?? "").join("|");
 }
 
 function normalizeText(value) {
